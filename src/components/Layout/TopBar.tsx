@@ -11,11 +11,12 @@ const PHASE_ICONS: Record<SeasonPhase, string> = {
 };
 
 interface Props {
-  user: User;
-  activeView: "builder" | "saved";
+  user: User | null;
+  activeView: "builder" | "saved" | "schedule";
   activePhase: SeasonPhase;
-  onSwitchView: (v: "builder" | "saved") => void;
+  onSwitchView: (v: "builder" | "saved" | "schedule") => void;
   onPhaseChange: (p: SeasonPhase) => void;
+  onSignIn: () => void;
   onSignOut: () => void;
 }
 
@@ -25,6 +26,7 @@ export function TopBar({
   activePhase,
   onSwitchView,
   onPhaseChange,
+  onSignIn,
   onSignOut,
 }: Props) {
   return (
@@ -36,34 +38,45 @@ export function TopBar({
         </span>
         <div className="w-px h-5 bg-white/10" />
         <nav className="flex gap-1">
-          {(["builder", "saved"] as const).map((view) => (
+          {(["builder", "schedule", "saved"] as const).map((view) => (
             <button
               key={view}
               onClick={() => onSwitchView(view)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all
                 ${activeView === view ? "bg-bg3 text-white" : "text-gray-500 hover:text-gray-300 hover:bg-bg3"}`}
             >
-              {view === "builder" ? "Builder" : "Saved Plans"}
+              {view === "builder" ? "Builder" : view === "schedule" ? "📅 Schedule" : "Saved Plans"}
             </button>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-white/7 bg-bg3 text-sm text-gray-400">
-            {user.photoURL && (
-              <img
-                src={user.photoURL}
-                alt=""
-                className="w-5 h-5 rounded-full"
-              />
-            )}
-            <span>{user.displayName?.split(" ")[0] ?? user.email}</span>
-          </div>
-          <button
-            onClick={onSignOut}
-            className="px-3 py-1.5 rounded-md text-sm border border-white/10 text-gray-400 hover:text-white hover:bg-bg3 transition-all"
-          >
-            Sign out
-          </button>
+          {user ? (
+            <>
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-white/7 bg-bg3 text-sm text-gray-400">
+                {user.photoURL && (
+                  <img
+                    src={user.photoURL}
+                    alt=""
+                    className="w-5 h-5 rounded-full"
+                  />
+                )}
+                <span>{user.displayName?.split(" ")[0] ?? user.email}</span>
+              </div>
+              <button
+                onClick={onSignOut}
+                className="px-3 py-1.5 rounded-md text-sm border border-white/10 text-gray-400 hover:text-white hover:bg-bg3 transition-all"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onSignIn}
+              className="px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-black hover:opacity-90 transition-all"
+            >
+              Sign in with Google
+            </button>
+          )}
         </div>
       </div>
 

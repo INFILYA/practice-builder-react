@@ -1,4 +1,4 @@
-export type ModuleKey = 'M1' | 'M2' | 'M3' | 'GS'
+export type ModuleKey = 'M1' | 'M2' | 'M3' | 'GS' | 'WU'
 
 export interface Drill {
   obj: string
@@ -6,11 +6,14 @@ export interface Drill {
   desc: string
   vars: string
   defaultMin: number
+  videoUrl?: string
+  createdBy?: string
+  createdByUid?: string
 }
 
 export interface PlanBlock {
   id: string
-  mod: ModuleKey | 'WU' | 'CD'
+  mod: ModuleKey | 'CD'
   obj: string
   name: string
   desc: string

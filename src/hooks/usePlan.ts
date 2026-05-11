@@ -25,7 +25,18 @@ export function usePlan() {
       mins: drill.defaultMin,
       notes: "",
     };
-    setBlocks((prev) => [...prev, block]);
+    setBlocks((prev) => {
+      if (mod === 'WU') {
+        // WU goes after the last existing WU block (top of list)
+        const lastWuIdx = prev.map(b => b.mod).lastIndexOf('WU');
+        const insertAt = lastWuIdx + 1;
+        return [...prev.slice(0, insertAt), block, ...prev.slice(insertAt)];
+      }
+      // Regular drills go before the first CD block (or at the end)
+      const firstCdIdx = prev.findIndex(b => b.mod === 'CD');
+      if (firstCdIdx === -1) return [...prev, block];
+      return [...prev.slice(0, firstCdIdx), block, ...prev.slice(firstCdIdx)];
+    });
   }, []);
 
   const addWarmup = useCallback(() => {
@@ -76,6 +87,12 @@ export function usePlan() {
     setEditingKey(null);
   }, []);
 
+  const startFromSchedule = useCallback((partialMeta: Partial<SessionMeta>) => {
+    setBlocks([]);
+    setEditingKey(null);
+    setMeta({ ...DEFAULT_META, ...partialMeta });
+  }, []);
+
   const loadPlan = useCallback(
     (key: string, saved: SessionMeta & { blocks: PlanBlock[] }) => {
       const { blocks: savedBlocks, ...savedMeta } = saved;
@@ -109,6 +126,7 @@ export function usePlan() {
     updateBlock,
     clearPlan,
     loadPlan,
+    startFromSchedule,
     setEditingKey,
     totalMins,
   };
