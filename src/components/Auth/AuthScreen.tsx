@@ -16,7 +16,7 @@ export function AuthScreen({ onSignIn }: Props) {
         <h1 className="font-condensed text-6xl font-black tracking-tight leading-none">
           Practice<span className="text-accent">Builder</span>
         </h1>
-        <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Unity Volleyball Club</p>
+        <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Practice planning & sessions</p>
       </div>
       <div className="bg-bg2 border border-white/10 rounded-xl p-8 w-80 flex flex-col gap-4">
         <h2 className="font-condensed text-xl font-semibold">Sign in to continue</h2>

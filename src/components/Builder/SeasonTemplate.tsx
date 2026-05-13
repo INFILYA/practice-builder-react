@@ -3,13 +3,22 @@ import { SEASON_TEMPLATES } from "../../data/seasons";
 import type { SeasonPhase } from "../../data/seasons";
 import type { PlanBlock } from "../../types";
 
+const PHASE_ICONS: Record<SeasonPhase, string> = {
+  "general-prep":      "🏋️",
+  "specific-prep":     "⚙️",
+  "pre-competition":   "🎯",
+  competition:         "🏆",
+  transition:          "🔄",
+}
+
 interface Props {
   totalDurationMins: number;
   activePhase: SeasonPhase;
   blocks: PlanBlock[];
+  onPhaseChange: (p: SeasonPhase) => void;
 }
 
-export function SeasonTemplate({ totalDurationMins, activePhase, blocks }: Props) {
+export function SeasonTemplate({ totalDurationMins, activePhase, blocks, onPhaseChange }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const template = SEASON_TEMPLATES.find((t) => t.phase === activePhase)!;
 
@@ -111,6 +120,28 @@ export function SeasonTemplate({ totalDurationMins, activePhase, blocks }: Props
       {/* Collapsible detail */}
       {isOpen && (
         <div className="bg-bg px-4 pb-4 pt-1">
+          {/* Phase selector */}
+          <div className="flex gap-1.5 flex-wrap mb-4">
+            {SEASON_TEMPLATES.map((t) => {
+              const isActive = activePhase === t.phase
+              return (
+                <button
+                  key={t.phase}
+                  onClick={() => onPhaseChange(t.phase)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
+                    isActive
+                      ? "bg-accent text-black font-semibold"
+                      : "border border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                  }`}
+                >
+                  <span>{PHASE_ICONS[t.phase]}</span>
+                  <span>{t.label}</span>
+                  {isActive && <span className="ml-0.5">✓</span>}
+                </button>
+              )
+            })}
+          </div>
+
           <p className="text-xs text-gray-500 mb-3 italic">
             {template.description}
           </p>

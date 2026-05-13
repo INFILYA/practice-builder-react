@@ -13,6 +13,8 @@ interface Props {
   editingKey: string | null;
   totalMins: number;
   activePhase: SeasonPhase;
+  canEditPlans: boolean;
+  onPhaseChange: (p: SeasonPhase) => void;
   onMetaChange: (u: Partial<SessionMeta>) => void;
   onRemoveBlock: (id: string) => void;
   onUpdateBlock: (id: string, u: Partial<PlanBlock>) => void;
@@ -29,6 +31,8 @@ export function PlanBuilder({
   editingKey,
   totalMins,
   activePhase,
+  canEditPlans,
+  onPhaseChange,
   onMetaChange,
   onRemoveBlock,
   onUpdateBlock,
@@ -62,6 +66,7 @@ export function PlanBuilder({
           ...meta,
           title: buildTitle(meta),
           blocks,
+          phase: activePhase,
           authorUid: user.uid,
           authorName: user.displayName ?? user.email ?? "Unknown",
           updatedAt: Date.now(),
@@ -98,20 +103,22 @@ export function PlanBuilder({
     a.href = URL.createObjectURL(
       new Blob([lines.join("\n")], { type: "text/plain" }),
     );
-    a.download = `Unity_${meta.group.replace(" ", "_")}_${meta.date}.txt`;
+    a.download = `PracticePlan_${meta.group.replace(" ", "_")}_${meta.date}.txt`;
     a.click();
   };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <SessionMetaBar meta={meta} onChange={onMetaChange} />
-      <SeasonTemplate totalDurationMins={maxMins} activePhase={activePhase} blocks={blocks} />
+      <SessionMetaBar meta={meta} onChange={onMetaChange} /* read-only display */ />
+      <SeasonTemplate totalDurationMins={maxMins} activePhase={activePhase} blocks={blocks} onPhaseChange={onPhaseChange} />
 
       <div className="flex-1 overflow-y-auto px-4 py-3 scrollbar-thin" onDragOver={handleDragOver} onDrop={handleDrop}>
         {blocks.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center gap-2 text-gray-600 text-sm">
-            <span className="text-3xl">←</span>
-            <span>Select drills from the library to build your session</span>
+          <div className="h-64 flex flex-col items-center justify-center gap-2 text-gray-600 text-sm text-center px-6">
+            <span className="text-3xl sm:hidden">☝️</span>
+            <span className="text-3xl hidden sm:block">←</span>
+            <span className="sm:hidden">Tap "Drill Library" above to browse and add drills</span>
+            <span className="hidden sm:block">Select drills from the library to build your session</span>
           </div>
         ) : (
           blocks.map((block) => (
@@ -125,36 +132,37 @@ export function PlanBuilder({
         )}
       </div>
 
-      <footer className="px-4 py-2.5 border-t border-white/7 bg-bg2 flex items-center gap-3">
-        <p
-          className={`text-sm flex-1 ${isOver ? "text-red-400" : "text-gray-400"}`}
-        >
-          Total:{" "}
-          <strong
-            className={`font-condensed text-base ${isOver ? "text-red-400" : "text-white"}`}
-          >
+      <footer className="px-3 sm:px-4 py-2.5 border-t border-white/7 bg-bg2 flex items-center gap-2 sm:gap-3 flex-wrap">
+        <p className={`text-sm flex-1 min-w-0 ${isOver ? "text-red-400" : "text-gray-400"}`}>
+          <strong className={`font-condensed text-base ${isOver ? "text-red-400" : "text-white"}`}>
             {totalMins}
-          </strong>{" "}
-          / {maxMins} min
+          </strong>
+          <span className="text-xs"> / {maxMins} min</span>
         </p>
         <button
           onClick={onClear}
-          className="px-3 py-1.5 rounded-md text-xs border border-white/10 text-gray-400 hover:text-white hover:bg-bg3 transition-all"
+          className="px-2.5 sm:px-3 py-1.5 rounded-md text-xs border border-white/10 text-gray-400 hover:text-white hover:bg-bg3 transition-all"
         >
           Clear
         </button>
         <button
           onClick={handleExport}
-          className="px-3 py-1.5 rounded-md text-xs border border-white/10 text-gray-400 hover:text-white hover:bg-bg3 transition-all"
+          className="hidden sm:block px-3 py-1.5 rounded-md text-xs border border-white/10 text-gray-400 hover:text-white hover:bg-bg3 transition-all"
         >
           Export .txt
         </button>
-        <button
-          onClick={handleSave}
-          className="px-4 py-1.5 rounded-md text-xs font-semibold bg-accent text-black hover:opacity-90 transition-all"
-        >
-          Save Plan
-        </button>
+        {canEditPlans ? (
+          <button
+            onClick={handleSave}
+            className="px-3 sm:px-4 py-1.5 rounded-md text-xs font-semibold bg-accent text-black hover:opacity-90 transition-all"
+          >
+            Save Plan
+          </button>
+        ) : (
+          <span className="px-3 py-1.5 rounded-md text-xs font-medium border border-white/10 text-gray-600 cursor-not-allowed" title="View only — ask admin for edit access">
+            View only
+          </span>
+        )}
       </footer>
     </div>
   );

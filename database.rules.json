@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "players": { ".read": "auth != null", ".write": "auth != null" },
+    "attendance": { ".read": "auth != null", ".write": "auth != null" },
+    "drillEdits": { ".read": "auth != null", ".write": "auth != null" },
+    "plans": { ".read": "auth != null", ".write": "auth != null" },
+    "availability": { ".read": "auth != null", ".write": "auth != null" },
+    "schedule": {
+      "sessions": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.token.email == 'infilya89@gmail.com'"
+      },
+      "groupColors": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.token.email == 'infilya89@gmail.com'"
+      },
+      "cancellations": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "customDrills": { ".read": "auth != null", ".write": "auth != null" },
+    "practiceEmailReminders": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('players').child(auth.uid).child('role').val() === 'coach')",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

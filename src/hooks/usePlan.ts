@@ -24,6 +24,7 @@ export function usePlan() {
       vars: drill.vars,
       mins: drill.defaultMin,
       notes: "",
+      ...(drill.videoUrl ? { videoUrl: drill.videoUrl } : {}),
     };
     setBlocks((prev) => {
       if (mod === 'WU') {
@@ -95,14 +96,20 @@ export function usePlan() {
 
   const loadPlan = useCallback(
     (key: string, saved: SessionMeta & { blocks: PlanBlock[] }) => {
-      const { blocks: savedBlocks, ...savedMeta } = saved;
       setBlocks(
-        savedBlocks.map((b) => ({
+        (saved.blocks ?? []).map((b) => ({
           ...b,
           id: `${Date.now()}-${Math.random()}`,
         })),
       );
-      setMeta(savedMeta);
+      // Only copy the clean SessionMeta fields — no Firebase extras
+      setMeta({
+        title:    saved.title    ?? '',
+        group:    saved.group    ?? DEFAULT_META.group,
+        date:     saved.date     ?? DEFAULT_META.date,
+        duration: saved.duration ?? DEFAULT_META.duration,
+        facility: saved.facility ?? DEFAULT_META.facility,
+      });
       setEditingKey(key);
     },
     [],

@@ -1,10 +1,14 @@
 export interface ScheduledSession {
   id: string
   date: string         // "2026-06-02"
-  group: '18U Boys' | '17U Boys' | '16U Boys'
+  group: string        // e.g. "18U Boys", "17U Girls" — extensible
   facility: string
   time: string         // "19:00"
-  duration: '120' | '180'
+  duration: string     // minutes as string, e.g. "120" or "180"
+}
+
+export interface GroupColorConfig {
+  bg: string           // Tailwind bg class, e.g. "bg-blue-600"
 }
 
 export const SUMMER_SCHEDULE: ScheduledSession[] = [
@@ -36,8 +40,7 @@ export const SUMMER_SCHEDULE: ScheduledSession[] = [
   { id: 'j25', date: '2026-06-30', group: '18U Boys', facility: 'MPAC',     time: '19:00', duration: '180' },
 
   // ── JULY ──────────────────────────────────────────────────────
-  { id: 'u01', date: '2026-07-01', group: '17U Boys', facility: 'Coliseum', time: '20:00', duration: '120' },
-  { id: 'u02', date: '2026-07-01', group: '16U Boys', facility: 'Coliseum', time: '18:00', duration: '120' },
+  // July 1 = Canada Day (no permits)
   { id: 'u03', date: '2026-07-02', group: '18U Boys', facility: 'Mount Joy',time: '20:00', duration: '120' },
   { id: 'u04', date: '2026-07-03', group: '17U Boys', facility: 'Coliseum', time: '20:00', duration: '120' },
   { id: 'u05', date: '2026-07-03', group: '16U Boys', facility: 'Coliseum', time: '18:00', duration: '120' },
@@ -93,8 +96,66 @@ export const SUMMER_SCHEDULE: ScheduledSession[] = [
   { id: 'a24', date: '2026-08-28', group: '16U Boys', facility: 'Coliseum', time: '18:00', duration: '120' },
 ]
 
-export const GROUP_COLORS = {
-  '18U Boys': { bg: 'bg-blue-600',   text: 'text-white', dot: 'bg-blue-500'   },
-  '17U Boys': { bg: 'bg-violet-600', text: 'text-white', dot: 'bg-violet-500' },
-  '16U Boys': { bg: 'bg-rose-600',   text: 'text-white', dot: 'bg-rose-500'   },
+// Default colors for the 3 original groups
+export const GROUP_COLORS: Record<string, { bg: string; text: string }> = {
+  '18U Boys': { bg: 'bg-blue-600',   text: 'text-white' },
+  '17U Boys': { bg: 'bg-violet-600', text: 'text-white' },
+  '16U Boys': { bg: 'bg-rose-600',   text: 'text-white' },
+}
+
+// Fallback palette for groups not in GROUP_COLORS
+export const COLOR_PALETTE: { bg: string; label: string }[] = [
+  { bg: 'bg-blue-600',    label: 'Blue'    },
+  { bg: 'bg-violet-600',  label: 'Purple'  },
+  { bg: 'bg-rose-600',    label: 'Red'     },
+  { bg: 'bg-amber-500',   label: 'Amber'   },
+  { bg: 'bg-green-600',   label: 'Green'   },
+  { bg: 'bg-cyan-600',    label: 'Cyan'    },
+  { bg: 'bg-pink-600',    label: 'Pink'    },
+  { bg: 'bg-emerald-600', label: 'Emerald' },
+  { bg: 'bg-orange-500',  label: 'Orange'  },
+  { bg: 'bg-teal-600',    label: 'Teal'    },
+]
+
+const FALLBACK_COLORS = COLOR_PALETTE.map(c => c.bg)
+
+// Destination queries for each known facility
+const FACILITY_DESTINATIONS: Record<string, string> = {
+  'MPAC':      'Markham Pan Am Centre, Richmond Hill, ON',
+  'Coliseum':  'Markham Coliseum, Markham, ON',
+  'Mount Joy': 'Mount Joy Community Centre, Markham, ON',
+}
+
+function buildMapsDirectionsUrl(destination: string, origin?: string): string {
+  const base = 'https://www.google.com/maps/dir/?api=1'
+  const d = `&destination=${encodeURIComponent(destination)}`
+  const o = origin ? `&origin=${encodeURIComponent(origin)}` : ''
+  return `${base}${o}${d}`
+}
+
+/** Opens Google Maps with a route from the user's current GPS location to the facility. */
+export function openFacilityDirections(facility: string): void {
+  const dest = FACILITY_DESTINATIONS[facility] ?? facility
+
+  const open = (origin?: string) =>
+    window.open(buildMapsDirectionsUrl(dest, origin), '_blank', 'noopener,noreferrer')
+
+  if (!navigator.geolocation) { open(); return }
+
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => open(`${coords.latitude},${coords.longitude}`),
+    ()           => open(),   // permission denied or unavailable — Google Maps will ask
+    { timeout: 6000, maximumAge: 60000 },
+  )
+}
+
+export function getGroupColor(
+  group: string,
+  dynamicColors: Record<string, { bg: string }> = {},
+): { bg: string; text: string } {
+  if (dynamicColors[group]) return { ...dynamicColors[group], text: 'text-white' }
+  if (GROUP_COLORS[group])  return GROUP_COLORS[group]
+  // Deterministic fallback based on group name hash
+  const idx = group.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % FALLBACK_COLORS.length
+  return { bg: FALLBACK_COLORS[idx], text: 'text-white' }
 }
