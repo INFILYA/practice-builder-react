@@ -16,6 +16,7 @@ import { SEASON_TEMPLATES } from "./data/seasons";
 import type { SeasonPhase } from "./data/seasons";
 import type { ScheduledSession } from "./data/schedule";
 import { fetchAllPlans, deletePlan, isAdminEmail } from "./firebase/db";
+import { SiteFooter } from "./components/Layout/SiteFooter";
 
 export default function App() {
   const { user, player, loading, signIn, signOut, refreshPlayer } = useAuth();
@@ -227,7 +228,13 @@ export default function App() {
           </div>
         )}
         {view === "players" && <PlayerList isAdmin={isAdminEmail(user?.email)} />}
-        {view === "coaches" && user && <CoachesList currentUserUid={user.uid} />}
+        {view === "coaches" && user && (
+          <CoachesList
+            currentUserUid={user.uid}
+            currentUserEmail={user.email ?? player?.email ?? undefined}
+            onToast={showToast}
+          />
+        )}
         {view === "schedule" && (
           <ScheduleCalendar
             sessions={sessions}
@@ -245,6 +252,8 @@ export default function App() {
           />
         )}
       </div>
+
+      <SiteFooter />
 
       {toast && (
         <div className="fixed bottom-6 right-6 bg-bg3 border border-white/10 px-4 py-2.5 rounded-lg text-sm text-white shadow-xl z-50">

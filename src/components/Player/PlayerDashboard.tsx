@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
-import { signInForSession, removeAttendance, fetchAttendance, fetchPlayerWellnessHistory, fetchAllPlans, setAvailability, removeAvailability, fetchAvailability, fetchDrillEdits, drillEditKey, fetchAllCustomDrillsForVideoLookup, fetchPracticeEmailReminder, savePracticeEmailReminder } from '../../firebase/db'
+import { signInForSession, removeAttendance, fetchAttendance, fetchPlayerWellnessHistory, fetchAllPlans, setAvailability, removeAvailability, fetchAvailability, fetchDrillEdits, drillEditKey, fetchAllCustomDrillsForVideoLookup, fetchPracticeEmailReminder, savePracticeEmailReminder, wantsPracticeEmailReminders, needsPracticeReminderMigration } from '../../firebase/db'
 import type { SavedPlanWithKey, PlanBlock, Player, GroupKey, WellnessData, AttendanceRecord, CancelledSession } from '../../types'
 import { openFacilityDirections, type ScheduledSession, getGroupColor } from '../../data/schedule'
 import { canSignInOnPracticeDay } from '../../utils/practiceSessionUtils'
 import { WellnessModal } from './WellnessModal'
+import { PracticeCountdownBanner } from './PracticeCountdownBanner'
+import { SiteFooter } from '../Layout/SiteFooter'
 import { ProfileEditModal } from '../Auth/ProfileEditModal'
 
 interface Props {
@@ -93,7 +95,7 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
   const [savingAvail,    setSavingAvail]    = useState(false)
   const [availError,     setAvailError]     = useState<string | null>(null)
 
-  const [emailRemindersOn, setEmailRemindersOn] = useState(false)
+  const [emailRemindersOn, setEmailRemindersOn] = useState(true)
   const [emailReminderSaving, setEmailReminderSaving] = useState(false)
   const [emailReminderError, setEmailReminderError] = useState<string | null>(null)
 
@@ -128,7 +130,12 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
     let cancelled = false
     fetchPracticeEmailReminder(user.uid)
       .then(data => {
-        if (!cancelled) setEmailRemindersOn(!!data?.enabled)
+        if (cancelled) return
+        const wants = wantsPracticeEmailReminders(data)
+        setEmailRemindersOn(wants)
+        if (needsPracticeReminderMigration(data)) {
+          void savePracticeEmailReminder(user.uid, wants).catch(() => {})
+        }
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -341,9 +348,10 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
             {/* Email reminder (RTDB + scheduled Cloud Function + Resend) */}
             <div className="rounded-xl border border-white/10 bg-bg2/80 px-4 py-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">Email before practice</p>
+                <p className="text-sm font-semibold text-white">Practice day email</p>
                 <p className="text-[10px] text-gray-600 leading-snug mt-0.5">
-                  The <strong>day before</strong> your practice, around <strong>4:00 PM (16:00) Toronto</strong>, if your group has a session. Sent to <span className="text-gray-500">{player.email}</span>.
+                  <strong>On by default</strong> for all players — on the <strong>morning of each practice</strong>, around <strong>8:00 AM Toronto</strong>, when your group has a session that day. Sent to{' '}
+                  <span className="text-gray-500">{player.email}</span>. Turn the switch off if you don&apos;t want these emails.
                 </p>
                 {emailReminderError && (
                   <p className="text-xs text-red-400 mt-1">{emailReminderError}</p>
@@ -353,7 +361,7 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
                 type="button"
                 role="switch"
                 aria-checked={emailRemindersOn}
-                aria-label="Email reminder day before practice at 4 PM Toronto"
+                aria-label="Practice day email reminders — turn off to opt out"
                 disabled={emailReminderSaving}
                 onClick={() => void handleToggleEmailReminders(!emailRemindersOn)}
                 className={`relative w-11 h-6 rounded-full flex-shrink-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
@@ -446,6 +454,8 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
                       </div>
                     </div>
                   )}
+
+                  <PracticeCountdownBanner session={nextSession} isCancelled={nextIsCancelled} />
 
                   {/* Can't attend — single path: reason + submit (coaches see this under Schedule → tap practice) */}
                   {!nextIsCancelled && (
@@ -709,6 +719,14 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
                       )}
                     </div>
 
+                    {isNext && (
+                      <PracticeCountdownBanner
+                        session={s}
+                        isCancelled={isCancelled}
+                        className="mt-3 mb-0"
+                      />
+                    )}
+
                     {/* Next session actions (same as home tab) */}
                     {isNext && (
                       <div className="mt-3 pt-3 border-t border-white/7 space-y-2">
@@ -740,6 +758,8 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
           )}
         </div>
       )}
+
+      <SiteFooter />
 
       {/* Drill detail modal */}
       {drillModal && (() => {

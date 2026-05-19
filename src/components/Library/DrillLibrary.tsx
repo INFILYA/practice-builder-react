@@ -108,10 +108,16 @@ export function DrillLibrary({ user, canEditPlans, onAddDrill }: Props) {
     return ed ? { ...base, ...ed } : base
   }
 
-  const mineForMod = useMemo(
-    () => drills.filter(d => d.createdByUid === user?.uid && d.mod === activeMod),
-    [drills, user?.uid, activeMod],
-  )
+  const mineForMod = useMemo(() => {
+    if (!user?.uid) return []
+    if (isAdminUser && source === 'mine') {
+      return drills.filter(d => d.createdByUid === user.uid && d.mod === activeMod)
+    }
+    if (!isAdminUser) {
+      return drills.filter(d => d.mod === activeMod)
+    }
+    return drills.filter(d => d.createdByUid === user.uid && d.mod === activeMod)
+  }, [drills, user?.uid, activeMod, isAdminUser, source])
 
   const coachFolders = useMemo(() => {
     if (!isAdminUser || source !== 'all') return [] as Array<{ key: string; label: string; drills: CustomDrill[] }>
@@ -140,11 +146,15 @@ export function DrillLibrary({ user, canEditPlans, onAddDrill }: Props) {
 
   const countForMod = (mod: ModuleKey) => {
     if (!user) return 0
-    if (source === 'mine') return drills.filter(d => d.createdByUid === user.uid && d.mod === mod).length
+    if (isAdminUser && source === 'mine') return drills.filter(d => d.createdByUid === user.uid && d.mod === mod).length
     return drills.filter(d => d.mod === mod).length
   }
 
-  const mineCount = user ? drills.filter(d => d.createdByUid === user.uid).length : 0
+  const mineCount = user
+    ? isAdminUser
+      ? drills.filter(d => d.createdByUid === user.uid).length
+      : drills.length
+    : 0
 
   // ── Drag / modal / create ────────────────────────────────────────────────
 
@@ -353,7 +363,12 @@ export function DrillLibrary({ user, canEditPlans, onAddDrill }: Props) {
                             </span>
                             <p className="text-xs font-semibold text-white truncate">{d.name}</p>
                           </div>
-                          <div className="flex gap-1 flex-shrink-0">
+                          <div className="flex gap-1 flex-shrink-0 items-center">
+                            {!isAdminUser && c.createdByUid !== user?.uid && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-accent/90 px-1 py-0.5 rounded bg-accent/10 border border-accent/25">
+                                Shared
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={ev => { ev.stopPropagation(); onAddDrill(d, c.mod) }}

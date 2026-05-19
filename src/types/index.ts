@@ -95,7 +95,10 @@ export interface CancelledSession {
 
 /** Stored under Realtime Database `practiceEmailReminders/{uid}` */
 export interface PracticeEmailReminder {
-  enabled: boolean
+  /** Only when `true` — player turned off practice-day emails (default is notifications on). */
+  optedOut?: boolean
+  /** @deprecated Legacy; delivery ignores this in favor of `optedOut`. */
+  enabled?: boolean
   updatedAt: number
 }
 
@@ -112,5 +115,11 @@ export interface CustomDrill {
   createdBy: string
   createdByUid: string
   createdAt: number
+  updatedAt: number
+}
+
+/** Stored under Realtime Database `adminDrillShare/{adminUid}` — admin-only; listed coaches see that admin's drills. */
+export interface AdminDrillShareSettings {
+  coachUids: string[]
   updatedAt: number
 }

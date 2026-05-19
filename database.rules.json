@@ -20,6 +20,12 @@
       }
     },
     "customDrills": { ".read": "auth != null", ".write": "auth != null" },
+    "adminDrillShare": {
+      ".read": "auth != null",
+      "$adminUid": {
+        ".write": "auth != null && auth.uid === $adminUid"
+      }
+    },
     "practiceEmailReminders": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || root.child('players').child(auth.uid).child('role').val() === 'coach')",

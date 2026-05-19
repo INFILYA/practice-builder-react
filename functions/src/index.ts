@@ -40,16 +40,6 @@ function dateInToronto(d = new Date()): string {
   return `${y}-${m}-${day}`
 }
 
-/** Next Gregorian calendar day after `ymd` (YYYY-MM-DD). Used with Toronto “today” for “practice tomorrow”. */
-function nextCalendarDateYmd(ymd: string): string {
-  const [y, mo, d] = ymd.split('-').map(Number)
-  const dt = new Date(Date.UTC(y, mo - 1, d + 1))
-  const yy = dt.getUTCFullYear()
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
-  const dd = String(dt.getUTCDate()).padStart(2, '0')
-  return `${yy}-${mm}-${dd}`
-}
-
 async function sendResend(opts: {
   apiKey: string
   from: string
@@ -77,13 +67,12 @@ async function sendResend(opts: {
 }
 
 /**
- * Daily 16:00 America/Toronto: players with `practiceEmailReminders/{uid}.enabled`
- * get one email if their group has a (non-cancelled) session on the **next** calendar day
- * (i.e. the day **before** that practice — reminder at 4 PM Toronto).
+ * Daily 08:00 America/Toronto: every player receives one email if their group has a session that calendar day,
+ * unless they set `practiceEmailReminders/{uid}.optedOut === true`.
  */
 export const sendPracticeDayReminders = onSchedule(
   {
-    schedule: '0 16 * * *',
+    schedule: '0 8 * * *',
     timeZone: 'America/Toronto',
     secrets: [resendApiKey],
     memory: '256MiB',
@@ -92,28 +81,36 @@ export const sendPracticeDayReminders = onSchedule(
   async () => {
     const db = getDatabase()
     const runDateToronto = dateInToronto()
-    const practiceDayYmd = nextCalendarDateYmd(runDateToronto)
+    const practiceDayYmd = runDateToronto
     const apiKey = resendApiKey.value()
     const from = process.env.RESEND_FROM?.trim() || DEFAULT_RESEND_FROM
 
-    const [remSnap, sessionsSnap, cancelSnap] = await Promise.all([
-      db.ref('practiceEmailReminders').get(),
+    const [playersSnap, sessionsSnap, cancelSnap, remSnap] = await Promise.all([
+      db.ref('players').get(),
       db.ref('schedule/sessions').get(),
       db.ref('schedule/cancellations').get(),
+      db.ref('practiceEmailReminders').get(),
     ])
 
-    if (!remSnap.exists()) {
-      console.log('[sendPracticeDayReminders] no practiceEmailReminders tree')
-      return
-    }
+    const reminders = remSnap.exists()
+      ? (remSnap.val() as Record<string, { optedOut?: boolean } | null>)
+      : {}
 
-    const reminders = remSnap.val() as Record<string, { enabled?: boolean } | null>
+    const playersVal = playersSnap.exists()
+      ? (playersSnap.val() as Record<string, PlayerRow | null>)
+      : {}
+
     const sessions: ScheduledSession[] = sessionsSnap.exists()
       ? Object.values(sessionsSnap.val() as Record<string, ScheduledSession>)
       : []
     const cancellations: Record<string, unknown> = cancelSnap.exists()
       ? (cancelSnap.val() as Record<string, unknown>)
       : {}
+
+    if (!playersSnap.exists()) {
+      console.log('[sendPracticeDayReminders] no players in database')
+      return
+    }
 
     const sessionsByGroupForPracticeDay = new Map<string, ScheduledSession[]>()
     for (const s of sessions) {
@@ -131,21 +128,14 @@ export const sendPracticeDayReminders = onSchedule(
     let sent = 0
     let skipped = 0
 
-    for (const [uid, row] of Object.entries(reminders)) {
-      if (!row?.enabled) {
+    for (const [uid, player] of Object.entries(playersVal)) {
+      if (!player || player.role !== 'player') {
         skipped++
         continue
       }
 
-      const playerSnap = await db.ref(`players/${uid}`).get()
-      if (!playerSnap.exists()) {
-        console.warn('[sendPracticeDayReminders] no player for uid', uid)
-        skipped++
-        continue
-      }
-
-      const player = playerSnap.val() as PlayerRow
-      if (player.role !== 'player') {
+      const reminderRow = reminders[uid]
+      if (reminderRow?.optedOut === true) {
         skipped++
         continue
       }
@@ -179,15 +169,15 @@ export const sendPracticeDayReminders = onSchedule(
 
       const subject =
         upcoming.length === 1
-          ? `Practice tomorrow — ${upcoming[0].time} @ ${upcoming[0].facility}`
-          : `Practice tomorrow — ${upcoming.length} sessions`
+          ? `Practice today — ${upcoming[0].time} @ ${upcoming[0].facility}`
+          : `Practice today — ${upcoming.length} sessions`
 
       const html = `
         <p>Hi ${escapeHtml(name)},</p>
-        <p>You have <strong>practice tomorrow</strong> (${escapeHtml(practiceDayYmd)} · Toronto):</p>
+        <p>You have <strong>practice today</strong> (${escapeHtml(practiceDayYmd)} · Toronto):</p>
         <ul>${lines}</ul>
         <p style="font-size:14px;margin-top:14px"><strong>Please open Practice Builder</strong>, sign in for practice, and complete your <strong>wellness</strong> check before you arrive.</p>
-        <p style="color:#666;font-size:13px;margin-top:12px">You’re receiving this because email reminders are turned on in Practice Builder.</p>
+        <p style="color:#666;font-size:13px;margin-top:12px">You receive these as a Practice Builder player. Turn off practice-day emails in your profile if you prefer not to get them.</p>
       `.trim()
 
       try {

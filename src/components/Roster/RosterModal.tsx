@@ -17,6 +17,9 @@ interface Props {
   group: GroupKey
   assignableGroups?: GroupKey[]
   onClose: () => void
+  /** Schedule admin: remove this age group and all its sessions from the calendar. */
+  onRemoveFromSchedule?: () => void | Promise<void>
+  isRemovingFromSchedule?: boolean
 }
 
 function mergeAssignableGroups(current: GroupKey, fromSchedule?: GroupKey[]): GroupKey[] {
@@ -27,7 +30,7 @@ function mergeAssignableGroups(current: GroupKey, fromSchedule?: GroupKey[]): Gr
   return Array.from(set)
 }
 
-export function RosterModal({ group, assignableGroups, onClose }: Props) {
+export function RosterModal({ group, assignableGroups, onClose, onRemoveFromSchedule, isRemovingFromSchedule }: Props) {
   const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState(true)
   const [assigning, setAssigning] = useState<string | null>(null)
@@ -129,6 +132,19 @@ export function RosterModal({ group, assignableGroups, onClose }: Props) {
             </>
           )}
         </div>
+
+        {onRemoveFromSchedule && (
+          <div className="px-6 py-4 border-t border-white/7">
+            <button
+              type="button"
+              disabled={isRemovingFromSchedule}
+              onClick={() => { void onRemoveFromSchedule() }}
+              className="text-left text-xs sm:text-sm font-semibold text-red-400/90 hover:text-red-300 disabled:opacity-40 transition-colors"
+            >
+              {isRemovingFromSchedule ? 'Removing…' : 'Remove group from schedule'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

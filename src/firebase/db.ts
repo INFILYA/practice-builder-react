@@ -1,6 +1,6 @@
 import { ref, push, set, get, remove } from 'firebase/database'
 import { db } from './config'
-import type { Drill, ModuleKey, CustomDrill, SavedPlan, SavedPlanWithKey, Player, AttendanceRecord, AvailabilityRecord, CancelledSession, PracticeEmailReminder } from '../types'
+import type { Drill, ModuleKey, CustomDrill, SavedPlan, SavedPlanWithKey, Player, AttendanceRecord, AvailabilityRecord, CancelledSession, PracticeEmailReminder, AdminDrillShareSettings } from '../types'
 import { DRILLS } from '../data/drills'
 import type { ScheduledSession, GroupColorConfig } from '../data/schedule'
 
@@ -41,10 +41,23 @@ export async function savePlayer(player: Player): Promise<void> {
   }
 }
 
-// ── Practice-day email reminders (RTDB + Cloud Function + Resend) ─────────
+// ── Practice-day email reminders: 8:00 Toronto same calendar day as session (RTDB + Cloud Function + Resend) ─────────
 
-export async function savePracticeEmailReminder(uid: string, enabled: boolean): Promise<void> {
-  const row: PracticeEmailReminder = { enabled, updatedAt: Date.now() }
+/** Default: players receive emails. Only `optedOut: true` opts out. Legacy `enabled` is ignored. */
+export function wantsPracticeEmailReminders(row: PracticeEmailReminder | null): boolean {
+  if (row === null) return true
+  return row.optedOut !== true
+}
+
+/** True when row is missing or still uses legacy shape without explicit `optedOut`. */
+export function needsPracticeReminderMigration(row: PracticeEmailReminder | null): boolean {
+  if (row === null) return true
+  return !Object.prototype.hasOwnProperty.call(row, 'optedOut')
+}
+
+/** `wantEmails` true = notifications on → writes `optedOut: false`. */
+export async function savePracticeEmailReminder(uid: string, wantEmails: boolean): Promise<void> {
+  const row: PracticeEmailReminder = { optedOut: !wantEmails, updatedAt: Date.now() }
   await set(ref(db, `practiceEmailReminders/${uid}`), row)
 }
 
@@ -283,6 +296,56 @@ export async function deleteGroupAndSessions(name: string): Promise<void> {
   )
 }
 
+// ── Admin drill sharing (allowlisted coaches see admin's custom drills) ─────
+
+const ADMIN_DRILL_SHARE_PATH = 'adminDrillShare'
+
+function normalizeCoachUidList(val: unknown): string[] {
+  if (val == null) return []
+  if (Array.isArray(val)) return val.filter((x): x is string => typeof x === 'string')
+  if (typeof val === 'object') {
+    return Object.entries(val as Record<string, unknown>)
+      .filter(([, v]) => v === true || v === 'true')
+      .map(([k]) => k)
+  }
+  return []
+}
+
+async function fetchAdminDrillShareTree(): Promise<Record<string, { coachUids?: unknown }>> {
+  const snap = await get(ref(db, ADMIN_DRILL_SHARE_PATH))
+  if (!snap.exists()) return {}
+  return snap.val() as Record<string, { coachUids?: unknown }>
+}
+
+function adminUidsSharingWithCoach(viewerUid: string, tree: Record<string, { coachUids?: unknown }>): Set<string> {
+  const out = new Set<string>()
+  for (const [adminUid, cfg] of Object.entries(tree)) {
+    if (normalizeCoachUidList(cfg.coachUids).includes(viewerUid)) out.add(adminUid)
+  }
+  return out
+}
+
+export async function fetchAdminDrillShareSettings(adminUid: string): Promise<AdminDrillShareSettings | null> {
+  const snap = await get(ref(db, `${ADMIN_DRILL_SHARE_PATH}/${adminUid}`))
+  if (!snap.exists()) return null
+  const v = snap.val() as { coachUids?: unknown; updatedAt?: number }
+  return {
+    coachUids: normalizeCoachUidList(v.coachUids),
+    updatedAt: typeof v.updatedAt === 'number' ? v.updatedAt : 0,
+  }
+}
+
+export async function saveAdminDrillShareSettings(
+  adminUid: string,
+  payload: Pick<AdminDrillShareSettings, 'coachUids'>,
+): Promise<void> {
+  const row: AdminDrillShareSettings = {
+    coachUids: payload.coachUids,
+    updatedAt: Date.now(),
+  }
+  await set(ref(db, `${ADMIN_DRILL_SHARE_PATH}/${adminUid}`), omitUndefined(row as unknown as Record<string, unknown>))
+}
+
 // ── Custom drills (per-coach; admin sees all + gets static pack as own) ─────
 
 const CUSTOM_DRILLS_PATH = 'customDrills'
@@ -387,7 +450,18 @@ export async function fetchCustomDrillsForBuilder(
     await ensureAdminStandardDrillsInCustomDrills(viewerUid, (viewerLabel || 'Coach').trim() || 'Coach')
   }
   const all = await fetchAllCustomDrillsFromDb()
-  const list = isAdmin ? all : all.filter(d => d.createdByUid === viewerUid)
+  if (isAdmin) {
+    return all.slice().sort((a, b) => {
+      const byObj = (a.obj ?? '').localeCompare(b.obj ?? '')
+      if (byObj !== 0) return byObj
+      return (a.name ?? '').localeCompare(b.name ?? '')
+    })
+  }
+  const shareTree = await fetchAdminDrillShareTree()
+  const allowedCreators = adminUidsSharingWithCoach(viewerUid, shareTree)
+  const list = all.filter(
+    d => d.createdByUid === viewerUid || (!!d.createdByUid && allowedCreators.has(d.createdByUid)),
+  )
   return list.slice().sort((a, b) => {
     const byObj = (a.obj ?? '').localeCompare(b.obj ?? '')
     if (byObj !== 0) return byObj

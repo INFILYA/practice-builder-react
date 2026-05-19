@@ -68,8 +68,6 @@ export function ScheduleCalendar({ sessions, groupColors, cancellations, onSelec
   const [showAddGroup,     setShowAddGroup]     = useState(false)
   const [availRefreshTick, setAvailRefreshTick] = useState(0)
   const [deletingGroup,    setDeletingGroup]    = useState<string | null>(null)
-  /** Admin: which group card is expanded to show remove-from-schedule (inside the card). */
-  const [groupCardExpanded, setGroupCardExpanded] = useState<string | null>(null)
 
   // Derive unique groups from sessions, preserve original order for first 3
   const allGroups = useMemo(() => {
@@ -103,16 +101,17 @@ export function ScheduleCalendar({ sessions, groupColors, cancellations, onSelec
     })
   }
 
-  const handleDeleteAgeGroup = async (group: string, sessionCount: number) => {
-    if (!window.confirm(`Remove “${group}” and all ${sessionCount} scheduled sessions from the calendar? This cannot be undone.`)) return
+  const handleDeleteAgeGroup = async (group: string, sessionCount: number): Promise<boolean> => {
+    if (!window.confirm(`Remove “${group}” and all ${sessionCount} scheduled sessions from the calendar? This cannot be undone.`)) return false
     setDeletingGroup(group)
     try {
       await deleteGroupAndSessions(group)
-      setGroupCardExpanded(prev => (prev === group ? null : prev))
       onScheduleChanged()
+      return true
     } catch (e) {
       console.error(e)
       window.alert('Could not remove this group. Check your connection and that you are signed in as the schedule admin.')
+      return false
     } finally {
       setDeletingGroup(null)
     }
@@ -208,16 +207,13 @@ export function ScheduleCalendar({ sessions, groupColors, cancellations, onSelec
             ? groupSessions.reduce((sum, s) => sum + (attendanceCounts[`${s.date}_${s.group}`] ?? 0), 0)
             : 0
 
-          const busy = deletingGroup === group
-          const showAdminPanel = canManageAgeGroups && sessionCount > 0 && groupCardExpanded === group
+          const openRosterOnCardClick = isCoach || canManageAgeGroups
           const shellClass = `relative bg-bg2 border rounded-lg px-2.5 sm:px-4 py-2.5 sm:py-3 transition-all ${
             isActive ? 'border-white/7' : 'border-white/5 opacity-50'
           } ${
-            showAdminPanel
-              ? 'ring-1 ring-accent/25'
-              : isCoach || (canManageAgeGroups && sessionCount > 0)
-                ? 'cursor-pointer hover:border-white/20 hover:-translate-y-0.5'
-                : ''
+            openRosterOnCardClick
+              ? 'cursor-pointer hover:border-white/20 hover:-translate-y-0.5'
+              : ''
           }`
 
           const statsBlock = (
@@ -271,52 +267,12 @@ export function ScheduleCalendar({ sessions, groupColors, cancellations, onSelec
             <div key={group} className="min-w-0">
               <div className={shellClass}>
                 {filterBtn}
-                {!canManageAgeGroups || sessionCount === 0 ? (
-                  isCoach ? (
-                    <button type="button" className="w-full text-left" onClick={() => setRosterGroup(group)}>
-                      {statsBlock}
-                    </button>
-                  ) : (
-                    <div>{statsBlock}</div>
-                  )
-                ) : showAdminPanel ? (
-                  <div>
-                    {statsBlock}
-                    <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
-                      {isCoach && (
-                        <button
-                          type="button"
-                          className="block w-full text-left text-xs font-semibold text-accent hover:text-accent/80"
-                          onClick={() => { setRosterGroup(group); setGroupCardExpanded(null) }}
-                        >
-                          View roster
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => { void handleDeleteAgeGroup(group, sessionCount) }}
-                        className="block w-full text-left text-[11px] sm:text-xs font-semibold text-red-400/90 hover:text-red-300 disabled:opacity-40"
-                      >
-                        {busy ? 'Removing…' : 'Remove group from schedule'}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[11px] text-gray-500 hover:text-gray-400"
-                        onClick={() => setGroupCardExpanded(null)}
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="w-full text-left"
-                    onClick={() => setGroupCardExpanded(group)}
-                  >
+                {openRosterOnCardClick ? (
+                  <button type="button" className="w-full text-left" onClick={() => setRosterGroup(group)}>
                     {statsBlock}
                   </button>
+                ) : (
+                  <div>{statsBlock}</div>
                 )}
               </div>
             </div>
@@ -462,6 +418,16 @@ export function ScheduleCalendar({ sessions, groupColors, cancellations, onSelec
           group={rosterGroup}
           assignableGroups={allGroups as GroupKey[]}
           onClose={() => setRosterGroup(null)}
+          onRemoveFromSchedule={
+            canManageAgeGroups
+              ? async () => {
+                  const count = sessions.filter(s => s.group === rosterGroup).length
+                  const removed = await handleDeleteAgeGroup(rosterGroup, count)
+                  if (removed) setRosterGroup(null)
+                }
+              : undefined
+          }
+          isRemovingFromSchedule={canManageAgeGroups && deletingGroup === rosterGroup}
         />
       )}
 
