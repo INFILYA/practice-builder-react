@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { User } from 'firebase/auth'
-import { savePlayer, deletePlayerProfile, COACH_PASSWORD, isAdminEmail } from '../../firebase/db'
+import { savePlayer, deletePlayerProfile, COACH_PASSWORD, PARENT_PASSWORD, isAdminEmail } from '../../firebase/db'
 import type { Player } from '../../types'
 
 interface Props {
@@ -13,6 +13,12 @@ interface Props {
 
 const POSITIONS = ['Setter', 'Outside Hitter', 'Middle Blocker', 'Opposite', 'Libero', 'Defensive Specialist']
 
+function initialRole(player: Player): Player['role'] {
+  if (player.role === 'coach') return 'coach'
+  if (player.role === 'parent') return 'parent'
+  return 'player'
+}
+
 export function ProfileEditModal({ user, player, onSaved, onDeleted, onClose }: Props) {
   const isAdmin = isAdminEmail(user.email)
 
@@ -20,25 +26,32 @@ export function ProfileEditModal({ user, player, onSaved, onDeleted, onClose }: 
   const [position,    setPosition]    = useState(player.position ?? '')
   const [jersey,      setJersey]      = useState(player.jersey != null ? String(player.jersey) : '')
   const [dob,         setDob]         = useState(player.dateOfBirth ?? '')
+  const [selectedRole, setSelectedRole] = useState<Player['role']>(initialRole(player))
   const [coachPwd,    setCoachPwd]    = useState('')
-  const [wantCoach,   setWantCoach]   = useState(player.role === 'coach')
-  const [pwdError,    setPwdError]    = useState(false)
+  const [parentPwd,   setParentPwd]   = useState('')
+  const [pwdError,    setPwdError]    = useState<'coach' | 'parent' | null>(null)
   const [saving,      setSaving]      = useState(false)
   const [confirmDel,  setConfirmDel]  = useState(false)
   const [deleting,    setDeleting]    = useState(false)
   const [saveError,   setSaveError]   = useState('')
 
-  const savingAsCoach = isAdmin || wantCoach
-  const showPlayerFields = !isAdmin && !wantCoach
+  const nextRole: Player['role'] = isAdmin ? 'coach' : selectedRole
+  const showPlayerFields = !isAdmin && nextRole === 'player'
 
   const handleSave = async () => {
-    setPwdError(false)
+    setPwdError(null)
     setSaveError('')
 
-    // Validate coach password if switching to coach (non-admin)
-    if (!isAdmin && wantCoach && player.role !== 'coach') {
+    if (!isAdmin && nextRole === 'coach' && player.role !== 'coach') {
       if (coachPwd.trim() !== COACH_PASSWORD) {
-        setPwdError(true)
+        setPwdError('coach')
+        return
+      }
+    }
+
+    if (!isAdmin && nextRole === 'parent' && player.role !== 'parent') {
+      if (parentPwd.trim() !== PARENT_PASSWORD) {
+        setPwdError('parent')
         return
       }
     }
@@ -52,11 +65,9 @@ export function ProfileEditModal({ user, player, onSaved, onDeleted, onClose }: 
     try {
       const digits = jersey.replace(/\D/g, '')
       const jerseyNum = digits ? parseInt(digits, 10) : undefined
-      const nextRole: Player['role'] = isAdmin ? 'coach' : wantCoach ? 'coach' : 'player'
-      // Plan/drill edits require admin toggle (Coaches list). Never auto-grant on role change or signup.
       let canEditPlans = player.canEditPlans
       if (!isAdmin) {
-        if (nextRole === 'player') {
+        if (nextRole === 'player' || nextRole === 'parent') {
           canEditPlans = false
         } else {
           canEditPlans = player.role === 'coach' ? (player.canEditPlans ?? false) : false
@@ -66,9 +77,9 @@ export function ProfileEditModal({ user, player, onSaved, onDeleted, onClose }: 
         ...player,
         displayName: displayName.trim() || player.displayName,
         role:        nextRole,
-        position:    savingAsCoach ? undefined : (position.trim() || undefined),
-        jersey:      savingAsCoach ? undefined : (Number.isFinite(jerseyNum) ? jerseyNum : undefined),
-        dateOfBirth: savingAsCoach ? undefined : (dob || undefined),
+        position:    nextRole === 'player' ? (position.trim() || undefined) : undefined,
+        jersey:      nextRole === 'player' ? (Number.isFinite(jerseyNum) ? jerseyNum : undefined) : undefined,
+        dateOfBirth: nextRole === 'player' ? (dob || undefined) : undefined,
         canEditPlans,
       }
       await savePlayer(updated)
@@ -106,6 +117,9 @@ export function ProfileEditModal({ user, player, onSaved, onDeleted, onClose }: 
           {isAdmin && (
             <span className="px-2 py-0.5 rounded-full bg-accent/20 text-accent text-xs font-bold flex-shrink-0">Admin</span>
           )}
+          {player.role === 'parent' && !isAdmin && (
+            <span className="px-2 py-0.5 rounded-full bg-white/10 text-gray-400 text-xs font-bold flex-shrink-0">Parent</span>
+          )}
           <button onClick={onClose} className="text-gray-500 hover:text-white text-2xl leading-none ml-2">×</button>
         </div>
 
@@ -121,51 +135,72 @@ export function ProfileEditModal({ user, player, onSaved, onDeleted, onClose }: 
             />
           </div>
 
-          {/* Role toggle — hidden for admin (always coach) */}
+          {/* Role — hidden for admin (always coach) */}
           {!isAdmin && (
             <div className="bg-bg3 rounded-xl p-4">
               <p className="text-xs text-gray-400 mb-3 font-semibold uppercase tracking-wider">Role</p>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setWantCoach(false); setCoachPwd(''); setPwdError(false); setSaveError('') }}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border ${
-                    !wantCoach ? 'bg-accent text-black border-accent' : 'border-white/10 text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Player
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setWantCoach(true); setSaveError('') }}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border ${
-                    wantCoach ? 'bg-accent text-black border-accent' : 'border-white/10 text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Coach
-                </button>
+                {(['player', 'parent', 'coach'] as const).map(role => (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => {
+                      setSelectedRole(role)
+                      setCoachPwd('')
+                      setParentPwd('')
+                      setPwdError(null)
+                      setSaveError('')
+                    }}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border capitalize ${
+                      selectedRole === role ? 'bg-accent text-black border-accent' : 'border-white/10 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {role}
+                  </button>
+                ))}
               </div>
 
-              {/* Show password field only when switching TO coach and not already coach */}
-              {wantCoach && player.role !== 'coach' && (
+              {nextRole === 'coach' && player.role !== 'coach' && (
                 <div className="mt-3">
                   <label className="block text-xs text-gray-400 mb-1">Coach access code</label>
                   <input
                     type="password"
                     value={coachPwd}
-                    onChange={e => { setCoachPwd(e.target.value); setPwdError(false) }}
+                    onChange={e => { setCoachPwd(e.target.value); setPwdError(null) }}
                     placeholder="Enter code provided by your coach"
                     className={`w-full bg-bg2 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
-                      pwdError ? 'border-red-500' : 'border-white/10 focus:border-accent'
+                      pwdError === 'coach' ? 'border-red-500' : 'border-white/10 focus:border-accent'
                     }`}
                   />
-                  {pwdError && <p className="text-xs text-red-400 mt-1">Incorrect access code</p>}
+                  {pwdError === 'coach' && <p className="text-xs text-red-400 mt-1">Incorrect access code</p>}
                 </div>
+              )}
+
+              {nextRole === 'parent' && player.role !== 'parent' && (
+                <div className="mt-3">
+                  <label className="block text-xs text-gray-400 mb-1">Parent access code</label>
+                  <input
+                    type="password"
+                    value={parentPwd}
+                    onChange={e => { setParentPwd(e.target.value); setPwdError(null) }}
+                    placeholder="Enter parent code"
+                    className={`w-full bg-bg2 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
+                      pwdError === 'parent' ? 'border-red-500' : 'border-white/10 focus:border-accent'
+                    }`}
+                  />
+                  {pwdError === 'parent' && <p className="text-xs text-red-400 mt-1">Incorrect parent code</p>}
+                </div>
+              )}
+
+              {nextRole === 'parent' && (
+                <p className="text-[11px] text-gray-600 mt-3 leading-snug">
+                  Parents can view the team schedule only. Your coach assigns you to an age group — you cannot pick one yourself.
+                </p>
               )}
             </div>
           )}
 
-          {/* Volleyball details — players only (add jersey & DOB here anytime) */}
+          {/* Volleyball details — players only */}
           {showPlayerFields && (
             <>
               <div>

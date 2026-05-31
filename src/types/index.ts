@@ -50,7 +50,7 @@ export interface Player {
   displayName: string
   email: string
   photoURL?: string
-  role: 'coach' | 'player'
+  role: 'coach' | 'player' | 'parent'
   group?: GroupKey | null
   position?: string
   jersey?: number

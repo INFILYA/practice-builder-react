@@ -78,16 +78,7 @@ export function ScheduleCalendar({ sessions, groupColors, cancellations, onSelec
     return Array.from(seen).filter(g => sessions.some(s => s.group === g))
   }, [sessions])
 
-  const [activeGroups, setActiveGroups] = useState<Set<string>>(new Set(allGroups))
-
-  // Keep activeGroups in sync when new groups are added
-  useEffect(() => {
-    setActiveGroups(prev => {
-      const next = new Set(prev)
-      allGroups.forEach(g => next.add(g))
-      return next
-    })
-  }, [allGroups])
+  const [activeGroups, setActiveGroups] = useState<Set<string>>(new Set())
 
   const toggleGroup = (group: string) => {
     setActiveGroups(prev => {
@@ -200,11 +191,12 @@ export function ScheduleCalendar({ sessions, groupColors, cancellations, onSelec
           const c = getGroupColor(group, groupColors)
           const isActive = activeGroups.has(group)
           const groupSessions = sessions.filter(s => s.group === group)
-          const sessionCount = groupSessions.length
-          const hours    = Math.round(groupSessions.reduce((sum, s) => sum + parseInt(s.duration) / 60, 0))
-          const planned  = groupSessions.filter(s => savedPlanDates.has(`${s.date}_${s.group}`)).length
+          const activeSessions = groupSessions.filter(s => !cancellations[s.id])
+          const sessionCount = activeSessions.length
+          const hours    = Math.round(activeSessions.reduce((sum, s) => sum + parseInt(s.duration) / 60, 0))
+          const planned  = activeSessions.filter(s => savedPlanDates.has(`${s.date}_${s.group}`)).length
           const totalSignIns = isCoach
-            ? groupSessions.reduce((sum, s) => sum + (attendanceCounts[`${s.date}_${s.group}`] ?? 0), 0)
+            ? activeSessions.reduce((sum, s) => sum + (attendanceCounts[`${s.date}_${s.group}`] ?? 0), 0)
             : 0
 
           const openRosterOnCardClick = isCoach || canManageAgeGroups

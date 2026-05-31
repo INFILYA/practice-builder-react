@@ -1,0 +1,16 @@
+Add parent role, drill sharing, unassigned badges, and analytics improvements
+
+- Add parent role with restricted PlayerDashboard view (schedule bookmark only)
+- Add ParentsList component for coaches to manage and assign parents to age groups
+- Add parent email reminder toggles (coach-controlled, opt-in model)
+- Add unassigned count badges in TopBar for both Players and Parents nav buttons
+- Add drill sharing toggle per coach in CoachesList
+- Fix Firebase rules for practiceEmailReminders to allow coach reads
+- Add error handling in ParentsList reload to prevent stuck loading state
+- Sync SeasonWellnessChart group to selected age group filter in PlayerList
+- Remove internal group switcher from SeasonWellnessChart (controlled externally)
+- Fix cancelled practices not counting toward session/hours totals
+- Add hash-based URL routing to persist view on page refresh
+- Add SVG factory favicon
+- Add Unassigned section and filter in PlayerList with red badge count
+- Fix PlayerList column header alignment

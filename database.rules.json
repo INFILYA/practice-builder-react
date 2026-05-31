@@ -27,9 +27,10 @@
       }
     },
     "practiceEmailReminders": {
+      ".read": "auth != null && root.child('players').child(auth.uid).child('role').val() === 'coach'",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || root.child('players').child(auth.uid).child('role').val() === 'coach')",
-        ".write": "auth != null && auth.uid === $uid"
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && (auth.uid === $uid || root.child('players').child(auth.uid).child('role').val() === 'coach')"
       }
     }
   }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { User } from 'firebase/auth'
-import { savePlayer, COACH_PASSWORD, isAdminEmail } from '../../firebase/db'
+import { savePlayer, COACH_PASSWORD, PARENT_PASSWORD, isAdminEmail } from '../../firebase/db'
 import type { Player } from '../../types'
 
 interface Props {
@@ -16,39 +16,55 @@ export function ProfileSetup({ user, onComplete }: Props) {
   const [displayName, setDisplayName] = useState(user.displayName ?? '')
   const [position,    setPosition]    = useState('')
   const [coachPwd,    setCoachPwd]    = useState('')
-  const [pwdError,    setPwdError]    = useState(false)
+  const [parentPwd,   setParentPwd]   = useState('')
+  const [pwdError,    setPwdError]    = useState<'coach' | 'parent' | null>(null)
   const [saveError,   setSaveError]   = useState('')
   const [saving,      setSaving]      = useState(false)
 
+  const coachCode  = coachPwd.trim()
+  const parentCode = parentPwd.trim()
+  const isCoachSignup  = isAdmin || coachCode !== ''
+  const isParentSignup = !isCoachSignup && parentCode !== ''
+  const isPlayerSignup = !isCoachSignup && !isParentSignup
+
   const handleSubmit = async () => {
-    setPwdError(false)
+    setPwdError(null)
     setSaveError('')
 
     const name = displayName.trim()
     if (!name) { setSaveError('Please enter your name.'); return }
 
-    // Admin email = always coach, no password needed
-    const isCoach = isAdmin || coachPwd.trim() !== ''
-    if (!isAdmin && coachPwd.trim() !== '' && coachPwd.trim() !== COACH_PASSWORD) {
-      setPwdError(true)
+    if (!isAdmin && coachCode && parentCode) {
+      setSaveError('Enter a coach code or a parent code — not both.')
       return
     }
 
-    if (!isCoach && !position.trim()) {
+    if (!isAdmin && coachCode && coachCode !== COACH_PASSWORD) {
+      setPwdError('coach')
+      return
+    }
+
+    if (!isAdmin && parentCode && parentCode !== PARENT_PASSWORD) {
+      setPwdError('parent')
+      return
+    }
+
+    if (isPlayerSignup && !position.trim()) {
       setSaveError('Please choose your position on the court.')
       return
     }
 
     setSaving(true)
     try {
+      const role: Player['role'] = isCoachSignup ? 'coach' : isParentSignup ? 'parent' : 'player'
       const player: Player = {
         uid:         user.uid,
         displayName: name || user.displayName || 'Player',
         email:       user.email ?? '',
         photoURL:    user.photoURL ?? undefined,
-        role:        isCoach ? 'coach' : 'player',
+        role,
         group:       null,
-        position:    isCoach ? undefined : position.trim(),
+        position:    role === 'player' ? position.trim() : undefined,
         createdAt:   Date.now(),
       }
       await savePlayer(player)
@@ -101,23 +117,51 @@ export function ProfileSetup({ user, onComplete }: Props) {
           {!isAdmin && (
             <div>
               <label className="block text-xs text-gray-400 mb-1">
-                Coach access code <span className="text-gray-600">(enter only if you are a coach)</span>
+                Coach access code <span className="text-gray-600">(coaches only)</span>
               </label>
               <input
                 type="password"
                 value={coachPwd}
-                onChange={e => { setCoachPwd(e.target.value); setPwdError(false); setSaveError('') }}
-                placeholder="Coach code — leave blank for player signup"
+                onChange={e => { setCoachPwd(e.target.value); setPwdError(null); setSaveError('') }}
+                placeholder="Leave blank unless you are a coach"
                 className={`w-full bg-bg3 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
-                  pwdError ? 'border-red-500' : 'border-white/10 focus:border-accent'
+                  pwdError === 'coach' ? 'border-red-500' : 'border-white/10 focus:border-accent'
                 }`}
               />
-              {pwdError && <p className="text-xs text-red-400 mt-1">Incorrect access code — leave blank to register as a player</p>}
+              {pwdError === 'coach' && (
+                <p className="text-xs text-red-400 mt-1">Incorrect coach code — leave blank for player or parent signup</p>
+              )}
             </div>
           )}
 
-          {/* Player only: volleyball position (jersey & age can be added later from profile icon) */}
-          {!isAdmin && coachPwd.trim() === '' && (
+          {/* Parent password — hidden for admins and when coach code entered */}
+          {!isAdmin && coachCode === '' && (
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">
+                Parent access code <span className="text-gray-600">(parents / guardians only)</span>
+              </label>
+              <input
+                type="password"
+                value={parentPwd}
+                onChange={e => { setParentPwd(e.target.value); setPwdError(null); setSaveError('') }}
+                placeholder="Leave blank to register as a player"
+                className={`w-full bg-bg3 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
+                  pwdError === 'parent' ? 'border-red-500' : 'border-white/10 focus:border-accent'
+                }`}
+              />
+              {pwdError === 'parent' && (
+                <p className="text-xs text-red-400 mt-1">Incorrect parent code — leave blank to register as a player</p>
+              )}
+              {isParentSignup && (
+                <p className="text-[11px] text-gray-600 mt-1.5 leading-snug">
+                  Parent accounts view the team schedule only — no sign-in or email reminders. Your coach will assign you to an age group.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Player only: volleyball position */}
+          {isPlayerSignup && (
             <div>
               <label className="block text-xs text-gray-400 mb-1">
                 Your position <span className="text-red-400">*</span>
@@ -148,7 +192,7 @@ export function ProfileSetup({ user, onComplete }: Props) {
             disabled={
               saving
               || !displayName.trim()
-              || (!isAdmin && coachPwd.trim() === '' && !position.trim())
+              || (isPlayerSignup && !position.trim())
             }
             className="w-full py-2.5 rounded-lg bg-accent text-black font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50 mt-2"
           >

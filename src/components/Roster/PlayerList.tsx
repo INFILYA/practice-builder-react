@@ -51,14 +51,17 @@ function MiniTrend({ history }: { history: WellnessEntry[] }) {
   )
 }
 
-interface Props { isAdmin: boolean }
+interface Props {
+  isAdmin: boolean
+  onUnassignedChange?: (count: number) => void
+}
 
-export function PlayerList({ isAdmin }: Props) {
+export function PlayerList({ isAdmin, onUnassignedChange }: Props) {
   const [stats,      setStats]      = useState<PlayerStats[]>([])
   const [loading,    setLoading]    = useState(true)
   const [selected,   setSelected]   = useState<PlayerStats | null>(null)
   const [search,     setSearch]     = useState('')
-  const [filter,     setFilter]     = useState<GroupKey | 'all'>('all')
+  const [filter,     setFilter]     = useState<GroupKey | 'all' | 'unassigned'>('all')
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
   const [deleting,   setDeleting]   = useState<string | null>(null)
   const [showChart,  setShowChart]  = useState(false)
@@ -103,13 +106,18 @@ export function PlayerList({ isAdmin }: Props) {
 
       setStats(computed)
       setLoading(false)
+      onUnassignedChange?.(computed.filter(s => !s.player.group).length)
     })
   }, [])
 
   const handleDelete = async (uid: string) => {
     setDeleting(uid)
     await deletePlayerProfile(uid)
-    setStats(prev => prev.filter(s => s.player.uid !== uid))
+    setStats(prev => {
+      const next = prev.filter(s => s.player.uid !== uid)
+      onUnassignedChange?.(next.filter(s => !s.player.group).length)
+      return next
+    })
     setConfirmDel(null)
     setDeleting(null)
     if (selected?.player.uid === uid) setSelected(null)
@@ -123,14 +131,17 @@ export function PlayerList({ isAdmin }: Props) {
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [stats])
 
+  const totalUnassigned = stats.filter(s => !s.player.group).length
+
   const filtered = stats.filter(s => {
-    const matchGroup  = filter === 'all' || s.player.group === filter
     const matchSearch = !search || s.player.displayName.toLowerCase().includes(search.toLowerCase())
+    if (filter === 'unassigned') return !s.player.group && matchSearch
+    const matchGroup  = filter === 'all' || s.player.group === filter
     return matchGroup && matchSearch
   })
 
   const grouped: Record<string, PlayerStats[]> = {}
-  const groups = filter === 'all' ? knownGroups : [filter as GroupKey]
+  const groups = (filter === 'all' || filter === 'unassigned') ? knownGroups : [filter as GroupKey]
   for (const g of groups) {
     grouped[g] = filtered.filter(s => s.player.group === g)
   }
@@ -148,7 +159,7 @@ export function PlayerList({ isAdmin }: Props) {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input
           type="text"
           value={search}
@@ -156,12 +167,23 @@ export function PlayerList({ isAdmin }: Props) {
           placeholder="Search player…"
           className="flex-1 bg-bg2 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent placeholder:text-gray-600"
         />
-        <div className="flex gap-1 bg-bg2 border border-white/10 rounded-lg p-1">
+        <div className="flex gap-1 bg-bg2 border border-white/10 rounded-lg p-1 flex-wrap">
           <button
             onClick={() => setFilter('all')}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${filter === 'all' ? 'bg-bg3 text-white' : 'text-gray-500 hover:text-white'}`}
           >
             All
+          </button>
+          <button
+            onClick={() => setFilter('unassigned')}
+            className={`relative px-3 py-1 rounded-md text-xs font-medium transition-all ${filter === 'unassigned' ? 'bg-red-500/30 text-red-300' : 'text-gray-500 hover:text-white'}`}
+          >
+            Unassigned
+            {totalUnassigned > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                {totalUnassigned}
+              </span>
+            )}
           </button>
           {knownGroups.map(g => {
             const c = getGroupColor(g)
@@ -205,16 +227,15 @@ export function PlayerList({ isAdmin }: Props) {
                   )}
                 </div>
 
-                {/* Column headers */}
-                <div className={`grid ${isAdmin ? 'grid-cols-[1fr_auto_auto]' : 'grid-cols-[1fr_auto]'} sm:grid-none gap-x-3 px-3 mb-1 text-xs text-gray-600 font-medium`}>
-                  <span>Player</span>
-                  {/* Desktop-only columns */}
-                  <span className="hidden sm:block text-center w-8">Phys</span>
-                  <span className="hidden sm:block text-center w-8">Ment</span>
-                  <span className="hidden sm:block text-center w-8">Sleep</span>
-                  <span className="hidden sm:block text-center w-12">Trend</span>
-                  <span className="text-center w-8">Avg</span>
-                  {isAdmin && <span className="w-7" />}
+                {/* Column headers — must match the flex layout of each data row */}
+                <div className="flex items-center gap-x-3 px-3 mb-1 text-xs text-gray-600 font-medium">
+                  <span className="flex-1 min-w-0">Player</span>
+                  <span className="hidden sm:block text-center w-8 flex-shrink-0">Phys</span>
+                  <span className="hidden sm:block text-center w-8 flex-shrink-0">Ment</span>
+                  <span className="hidden sm:block text-center w-8 flex-shrink-0">Sleep</span>
+                  <span className="hidden sm:block text-center w-12 flex-shrink-0">Trend</span>
+                  <span className="text-center w-8 flex-shrink-0">Avg</span>
+                  {isAdmin && <span className="w-7 flex-shrink-0" />}
                 </div>
 
                 <div className="space-y-1">
@@ -283,9 +304,12 @@ export function PlayerList({ isAdmin }: Props) {
           })}
 
           {/* Unassigned */}
-          {unassigned.length > 0 && (
+          {unassigned.length > 0 && (filter === 'all' || filter === 'unassigned') && (
             <div>
-              <h3 className="font-condensed text-lg font-bold text-gray-600 mb-2">Pending assignment ({unassigned.length})</h3>
+              <h3 className="font-condensed text-lg font-bold text-red-400/80 mb-2 flex items-center gap-2">
+                Pending assignment
+                <span className="text-sm font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">{unassigned.length}</span>
+              </h3>
               <div className="space-y-1">
                 {unassigned.map(s => (
                   <button
@@ -318,14 +342,20 @@ export function PlayerList({ isAdmin }: Props) {
             <span className="text-base">📈</span>
             <div className="text-left">
               <p className="text-sm font-semibold">Season Fatigue Curve</p>
-              <p className="text-xs text-gray-500">Average wellness scores across all practices</p>
+              <p className="text-xs text-gray-500">
+                {filter !== 'all' && filter !== 'unassigned'
+                  ? `${filter} · average wellness across all practices`
+                  : 'Average wellness scores across all practices'}
+              </p>
             </div>
           </div>
           <span className={`text-gray-500 text-sm transition-transform duration-200 ${showChart ? 'rotate-180' : ''}`}>▼</span>
         </button>
         {showChart && (
           <div className="border-t border-white/7">
-            <SeasonWellnessChart />
+            <SeasonWellnessChart
+              selectedGroup={filter !== 'all' && filter !== 'unassigned' ? filter : undefined}
+            />
           </div>
         )}
       </div>

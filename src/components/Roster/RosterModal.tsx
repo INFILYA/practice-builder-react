@@ -50,7 +50,7 @@ export function RosterModal({ group, assignableGroups, onClose, onRemoveFromSche
     setAssigning(null)
   }
 
-  const inGroup   = players.filter(p => p.group === group)
+  const inGroup   = players.filter(p => p.group === group && p.role === 'player')
   const pending   = players.filter(p => !p.group && p.role === 'player')
   const colors    = getGroupColor(group)
   const moveTargets = mergeAssignableGroups(group, assignableGroups)

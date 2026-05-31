@@ -45,6 +45,7 @@ function WellnessBadge({ w }: { w: WellnessData }) {
 }
 
 export function PlayerDashboard({ user, player, sessions, cancellations, onSignOut, onProfileUpdated }: Props) {
+  const isParent = player.role === 'parent'
   const group = player.group as GroupKey | null
   const colors = group ? getGroupColor(group) : { bg: 'bg-gray-600', text: 'text-white' }
 
@@ -57,7 +58,7 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
   // Only the single next upcoming practice
   const nextSession = mySessions.find(s => s.date >= today) ?? null
 
-  const [tab,             setTab]             = useState<'home' | 'schedule'>('home')
+  const [tab,             setTab]             = useState<'home' | 'schedule'>(isParent ? 'schedule' : 'home')
   const [showMenu,        setShowMenu]        = useState(false)
   const [showEditProfile, setShowEditProfile] = useState(false)
   const [signedInKey,  setSignedInKey]  = useState<string | null>(null)
@@ -127,6 +128,7 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
   }
 
   useEffect(() => {
+    if (isParent) return
     let cancelled = false
     fetchPracticeEmailReminder(user.uid)
       .then(data => {
@@ -139,7 +141,7 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [user.uid])
+  }, [user.uid, isParent])
 
   const handleToggleEmailReminders = async (next: boolean) => {
     setEmailReminderError(null)
@@ -173,6 +175,10 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
 
   // Fetch attendance, wellness history, and practice plan for next session
   useEffect(() => {
+    if (isParent) {
+      setLoading(false)
+      return
+    }
     if (!nextSession) {
       setLoading(false)
       return
@@ -202,7 +208,7 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
       setSessionPlan(plan)
       setLoading(false)
     })
-  }, [nextSession?.date, nextSession?.group, user.uid])
+  }, [nextSession?.date, nextSession?.group, user.uid, isParent])
 
   const handleSignInClick = () => {
     if (signedInKey) {
@@ -252,21 +258,25 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
           Practice<span className="text-accent">Builder</span>
         </span>
 
-        {/* Tab switcher */}
-        <div className="flex gap-1 bg-bg3/60 p-1 rounded-lg border border-white/7 ml-1 flex-shrink-0">
-          <button
-            onClick={() => setTab('home')}
-            className={`px-3 py-1 rounded text-xs font-semibold transition-all ${tab === 'home' ? 'bg-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-          >
-            🏠 Home
-          </button>
-          <button
-            onClick={() => setTab('schedule')}
-            className={`px-3 py-1 rounded text-xs font-semibold transition-all ${tab === 'schedule' ? 'bg-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-          >
-            📅 Schedule
-          </button>
-        </div>
+        {/* Tab switcher — parents: schedule only */}
+        {!isParent ? (
+          <div className="flex gap-1 bg-bg3/60 p-1 rounded-lg border border-white/7 ml-1 flex-shrink-0">
+            <button
+              onClick={() => setTab('home')}
+              className={`px-3 py-1 rounded text-xs font-semibold transition-all ${tab === 'home' ? 'bg-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+            >
+              🏠 Home
+            </button>
+            <button
+              onClick={() => setTab('schedule')}
+              className={`px-3 py-1 rounded text-xs font-semibold transition-all ${tab === 'schedule' ? 'bg-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+            >
+              📅 Schedule
+            </button>
+          </div>
+        ) : (
+          <span className="text-xs font-semibold text-gray-400 ml-2">📅 Schedule</span>
+        )}
 
         <div className="flex-1" />
 
@@ -293,7 +303,10 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
                 <div className="px-4 py-3 border-b border-white/7">
                   <p className="text-sm font-semibold truncate">{player.displayName}</p>
                   <p className="text-xs text-gray-500 truncate">
-                    {group ?? 'No group'}{player.position ? ` · ${player.position}` : ''}{player.jersey ? ` · #${player.jersey}` : ''}
+                    {group ?? 'No group'}
+                    {isParent ? ' · Parent' : ''}
+                    {!isParent && player.position ? ` · ${player.position}` : ''}
+                    {!isParent && player.jersey ? ` · #${player.jersey}` : ''}
                   </p>
                 </div>
                 <button
@@ -314,6 +327,7 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
         </div>
       </header>
 
+      {!isParent && (
       <div className="flex-1 w-full max-w-lg mx-auto px-5 py-6 space-y-6" style={{ display: tab === 'schedule' ? 'none' : undefined }}>
 
         {/* Player card */}
@@ -337,9 +351,15 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
         </div>
 
         {!group ? (
-          <div className="text-center py-12 text-gray-500">
-            <p className="text-lg font-semibold mb-2">Waiting for group assignment</p>
-            <p className="text-sm">The coach will assign you to a group soon.</p>
+          <div className="text-center py-12 text-gray-500 px-4">
+            <p className="text-lg font-semibold mb-2">
+              {isParent ? 'Waiting for coach assignment' : 'Waiting for group assignment'}
+            </p>
+            <p className="text-sm leading-relaxed">
+              {isParent
+                ? 'Your coach must assign you to your athlete\'s age group before you can see the schedule. You cannot choose a group yourself.'
+                : 'The coach will assign you to a group soon.'}
+            </p>
           </div>
         ) : loading ? (
           <p className="text-gray-500 text-sm text-center py-8">Loading…</p>
@@ -643,16 +663,19 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
           </>
         )}
       </div>
+      )}
 
       {/* ── Schedule tab ── */}
-      {tab === 'schedule' && (
+      {(isParent || tab === 'schedule') && (
         <div className="flex-1 w-full max-w-lg mx-auto px-5 py-6">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-600 mb-4">
-            {group ? `${group} · Full Season Schedule` : 'Full Season Schedule'}
+            {group ? `${group} · ${isParent ? 'Season Schedule' : 'Full Season Schedule'}` : 'Full Season Schedule'}
           </h2>
 
           {!group ? (
-            <p className="text-gray-500 text-sm text-center py-12">Waiting for group assignment.</p>
+            <p className="text-gray-500 text-sm text-center py-12 px-4 leading-relaxed">
+              Waiting for your coach to assign you to your athlete&apos;s age group. You cannot pick a group yourself.
+            </p>
           ) : (
             <div className="space-y-2">
               {mySessions.map(s => {
@@ -701,17 +724,17 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
                       {isCancelled && (
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-red-500/20 text-red-400">Cancelled</span>
                       )}
-                      {!isCancelled && isPast && wasSignedIn && (
+                      {!isCancelled && !isParent && isPast && wasSignedIn && (
                         <span className="text-xs font-semibold text-green-400 flex-shrink-0">✓ attended</span>
                       )}
-                      {!isCancelled && isPast && !wasSignedIn && (
+                      {!isCancelled && !isParent && isPast && !wasSignedIn && (
                         <span className="text-xs text-gray-700 flex-shrink-0">missed</span>
                       )}
                       {!isCancelled && isNext && (
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                          isSignedInNow ? 'bg-green-500/20 text-green-400' : 'bg-accent/20 text-accent'
+                          !isParent && isSignedInNow ? 'bg-green-500/20 text-green-400' : 'bg-accent/20 text-accent'
                         }`}>
-                          {isSignedInNow ? '✓ signed in' : 'next'}
+                          {!isParent && isSignedInNow ? '✓ signed in' : 'next'}
                         </span>
                       )}
                       {!isCancelled && !isPast && !isNext && (
@@ -727,8 +750,8 @@ export function PlayerDashboard({ user, player, sessions, cancellations, onSignO
                       />
                     )}
 
-                    {/* Next session actions (same as home tab) */}
-                    {isNext && (
+                    {/* Next session sign-in — players only */}
+                    {isNext && !isParent && (
                       <div className="mt-3 pt-3 border-t border-white/7 space-y-2">
                         {isSignedInNow ? (
                           <button

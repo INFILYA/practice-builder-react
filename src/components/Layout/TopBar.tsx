@@ -6,10 +6,12 @@ import type { Player } from "../../types";
 interface Props {
   user: User | null;
   player?: Player | null;
-  activeView: "builder" | "schedule" | "players" | "coaches";
+  activeView: "builder" | "schedule" | "players" | "parents" | "coaches";
   isCoach: boolean;
   isAdmin: boolean;
-  onSwitchView: (v: "builder" | "schedule" | "players" | "coaches") => void;
+  unassignedPlayerCount?: number;
+  unassignedParentCount?: number;
+  onSwitchView: (v: "builder" | "schedule" | "players" | "parents" | "coaches") => void;
   onSignIn: () => void;
   onSignOut: () => void;
   onProfileUpdated?: () => void;
@@ -21,6 +23,8 @@ export function TopBar({
   activeView,
   isCoach,
   isAdmin,
+  unassignedPlayerCount = 0,
+  unassignedParentCount = 0,
   onSwitchView,
   onSignIn,
   onSignOut,
@@ -29,7 +33,7 @@ export function TopBar({
   const [showEdit, setShowEdit] = useState(false)
 
   const navViews = (["builder", "schedule",
-    ...(isCoach ? ["players" as const] : []),
+    ...(isCoach ? ["players" as const, "parents" as const] : []),
     ...(isAdmin ? ["coaches" as const] : []),
   ] as const)
 
@@ -37,6 +41,7 @@ export function TopBar({
     view === "builder"  ? { emoji: "🏗", short: "Builder",  full: "🏗 Builder"  }
     : view === "schedule" ? { emoji: "📅", short: "Schedule", full: "📅 Schedule" }
     : view === "players"  ? { emoji: "👥", short: "Players",  full: "👥 Players"  }
+    : view === "parents"  ? { emoji: "👪", short: "Parents",  full: "👪 Parents"  }
     :                       { emoji: "🎓", short: "Coaches",  full: "🎓 Coaches"  }
 
   return (
@@ -55,13 +60,23 @@ export function TopBar({
               <button
                 key={view}
                 onClick={() => onSwitchView(view)}
-                className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all select-none ${
+                className={`relative px-4 py-1.5 rounded-md text-sm font-semibold transition-all select-none ${
                   activeView === view
                     ? "bg-accent text-black shadow-sm"
                     : "text-gray-400 hover:text-white hover:bg-white/8"
                 }`}
               >
                 {navLabel(view).full}
+                {view === "players" && unassignedPlayerCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    {unassignedPlayerCount}
+                  </span>
+                )}
+                {view === "parents" && unassignedParentCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    {unassignedParentCount}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -112,7 +127,7 @@ export function TopBar({
             <button
               key={view}
               onClick={() => onSwitchView(view)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all select-none flex-shrink-0 ${
+              className={`relative flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all select-none flex-shrink-0 ${
                 activeView === view
                   ? "bg-accent text-black shadow-sm"
                   : "text-gray-400 bg-bg3/60 border border-white/7 hover:text-white"
@@ -120,6 +135,16 @@ export function TopBar({
             >
               <span>{l.emoji}</span>
               <span>{l.short}</span>
+              {view === "players" && unassignedPlayerCount > 0 && (
+                <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {unassignedPlayerCount}
+                </span>
+              )}
+              {view === "parents" && unassignedParentCount > 0 && (
+                <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {unassignedParentCount}
+                </span>
+              )}
             </button>
           )
         })}

@@ -7,6 +7,8 @@ import type { ScheduledSession, GroupColorConfig } from '../data/schedule'
 /** Coach gate for profile setup; override in `.env` as `VITE_COACH_PASSWORD=...` if needed. */
 const viteEnv = (import.meta as unknown as { env?: Record<string, string> }).env
 export const COACH_PASSWORD = (viteEnv?.VITE_COACH_PASSWORD?.trim() || 'practice2026')
+/** Parent/guardian gate; override in `.env` as `VITE_PARENT_PASSWORD=...` if needed. */
+export const PARENT_PASSWORD = (viteEnv?.VITE_PARENT_PASSWORD?.trim() || 'Parents2026')
 
 // Emails that always get coach/admin access regardless of password
 export const ADMIN_EMAILS = ['infilya89@gmail.com']
@@ -65,6 +67,12 @@ export async function fetchPracticeEmailReminder(uid: string): Promise<PracticeE
   const snap = await get(ref(db, `practiceEmailReminders/${uid}`))
   if (!snap.exists()) return null
   return snap.val() as PracticeEmailReminder
+}
+
+export async function fetchAllPracticeEmailReminders(): Promise<Record<string, PracticeEmailReminder>> {
+  const snap = await get(ref(db, 'practiceEmailReminders'))
+  if (!snap.exists()) return {}
+  return snap.val() as Record<string, PracticeEmailReminder>
 }
 
 export async function fetchPlayer(uid: string): Promise<Player | null> {

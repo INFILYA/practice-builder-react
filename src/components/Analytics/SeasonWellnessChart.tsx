@@ -214,7 +214,7 @@ function GroupChart({ group, data, sessions }: { group: GroupKey; data: DataPoin
   )
 }
 
-export function SeasonWellnessChart() {
+export function SeasonWellnessChart({ selectedGroup }: { selectedGroup?: GroupKey }) {
   const [data,    setData]    = useState<DataPoint[]>([])
   const [loading, setLoading] = useState(true)
   const [active,  setActive]  = useState<GroupKey>('18U Boys')
@@ -225,11 +225,18 @@ export function SeasonWellnessChart() {
     return (u.length ? u : GROUPS) as GroupKey[]
   }, [sessions])
 
+  // Sync internal active to the externally selected group when provided
   useEffect(() => {
-    if (!chartGroups.includes(active)) {
+    if (selectedGroup && chartGroups.includes(selectedGroup)) {
+      setActive(selectedGroup)
+    }
+  }, [selectedGroup, chartGroups])
+
+  useEffect(() => {
+    if (!selectedGroup && !chartGroups.includes(active)) {
       setActive(chartGroups[0] ?? '18U Boys')
     }
-  }, [chartGroups, active])
+  }, [chartGroups]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchAllAttendance().then(allAtt => {
@@ -273,23 +280,6 @@ export function SeasonWellnessChart() {
           ))}
         </div>
 
-        {/* Group switcher */}
-        <div className="flex gap-1 bg-bg3/60 p-1 rounded-lg border border-white/7 flex-shrink-0">
-          {chartGroups.map(g => {
-            const gc = getGroupColor(g)
-            return (
-              <button
-                key={g}
-                onClick={() => setActive(g)}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                  active === g ? `${gc.bg} text-white` : 'text-gray-500 hover:text-white'
-                }`}
-              >
-                {g.replace(' Boys', '')}
-              </button>
-            )
-          })}
-        </div>
       </div>
 
       {/* Zone legend */}

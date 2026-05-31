@@ -11,22 +11,53 @@ import { ProfileSetup } from "./components/Auth/ProfileSetup";
 import { PlayerDashboard } from "./components/Player/PlayerDashboard";
 import { PlayerList } from "./components/Roster/PlayerList";
 import { CoachesList } from "./components/Roster/CoachesList";
+import { ParentsList } from "./components/Roster/ParentsList";
 import type { Drill, ModuleKey, SavedPlanWithKey, Player } from "./types";
 import { SEASON_TEMPLATES } from "./data/seasons";
 import type { SeasonPhase } from "./data/seasons";
 import type { ScheduledSession } from "./data/schedule";
-import { fetchAllPlans, deletePlan, isAdminEmail } from "./firebase/db";
+import { fetchAllPlans, deletePlan, isAdminEmail, fetchPlayers } from "./firebase/db";
 import { SiteFooter } from "./components/Layout/SiteFooter";
+
+type ViewKey = "builder" | "schedule" | "players" | "parents" | "coaches"
+const VALID_VIEWS = new Set<ViewKey>(["builder", "schedule", "players", "parents", "coaches"])
+
+function readHashView(): ViewKey {
+  const hash = window.location.hash.replace('#', '') as ViewKey
+  return VALID_VIEWS.has(hash) ? hash : "builder"
+}
 
 export default function App() {
   const { user, player, loading, signIn, signOut, refreshPlayer } = useAuth();
   const plan = usePlan();
   const { sessions, groupColors, cancellations, refresh: refreshSchedule } = useSchedule();
-  const [view, setView]             = useState<"builder" | "schedule" | "players" | "coaches">("builder");
+  const [view, setView]             = useState<ViewKey>(readHashView);
   const [activePhase, setPhase]     = useState<SeasonPhase>("specific-prep");
   const [mobileBuildTab, setMobileBuildTab] = useState<"drills" | "plan">("plan");
   const [toast, setToast]       = useState("");
   const [toastTimer, setToastTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep hash in sync with view
+  useEffect(() => {
+    window.location.hash = view
+  }, [view])
+
+  // Listen for browser back/forward navigation
+  useEffect(() => {
+    const onHashChange = () => setView(readHashView())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  // Unassigned player/parent counts — for TopBar badges
+  const [unassignedPlayerCount, setUnassignedPlayerCount] = useState(0);
+  const [unassignedParentCount, setUnassignedParentCount] = useState(0);
+  const refreshUnassigned = useCallback(async () => {
+    const all = await fetchPlayers();
+    setUnassignedPlayerCount(all.filter(p => p.role === 'player' && !p.group).length);
+    setUnassignedParentCount(all.filter(p => p.role === 'parent' && !p.group).length);
+  }, []);
+  useEffect(() => { if (player?.role === 'coach') refreshUnassigned(); }, [player?.role, refreshUnassigned]);
 
   // All saved plans — for calendar ✓ marks
   const [allPlans, setAllPlans] = useState<SavedPlanWithKey[]>([]);
@@ -35,7 +66,7 @@ export default function App() {
   }, []);
   useEffect(() => { refreshPlans(); }, [refreshPlans]);
 
-  const switchView = useCallback((v: "builder" | "schedule" | "players" | "coaches") => {
+  const switchView = useCallback((v: ViewKey) => {
     if (v === "schedule") refreshPlans();
     setView(v);
   }, [refreshPlans]);
@@ -137,7 +168,7 @@ export default function App() {
   }
 
   // ── Player view ────────────────────────────────────────────────────────────
-  if (user && player && player.role === 'player') {
+  if (user && player && (player.role === 'player' || player.role === 'parent')) {
     return <PlayerDashboard user={user} player={player} sessions={sessions} cancellations={cancellations} onSignOut={signOut} onProfileUpdated={refreshPlayer} />;
   }
 
@@ -154,6 +185,8 @@ export default function App() {
         activeView={view}
         isCoach={isCoach}
         isAdmin={canEditPlans && isAdminEmail(user?.email)}
+        unassignedPlayerCount={isCoach ? unassignedPlayerCount : 0}
+        unassignedParentCount={isCoach ? unassignedParentCount : 0}
         onSwitchView={switchView}
         onSignIn={signIn}
         onSignOut={signOut}
@@ -227,7 +260,15 @@ export default function App() {
             </div>
           </div>
         )}
-        {view === "players" && <PlayerList isAdmin={isAdminEmail(user?.email)} />}
+        {view === "players" && (
+          <PlayerList
+            isAdmin={isAdminEmail(user?.email)}
+            onUnassignedChange={setUnassignedPlayerCount}
+          />
+        )}
+        {view === "parents" && isCoach && (
+          <ParentsList sessions={sessions} onToast={showToast} onUnassignedChange={setUnassignedParentCount} />
+        )}
         {view === "coaches" && user && (
           <CoachesList
             currentUserUid={user.uid}

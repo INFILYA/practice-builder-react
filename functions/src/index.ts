@@ -17,6 +17,11 @@ type PlayerRow = {
   group?: string | null
 }
 
+/** Parent reminder row: opt-IN model — send only when `optedOut === false` explicitly. */
+function parentEmailEnabled(row: { optedOut?: boolean } | null | undefined): boolean {
+  return row != null && row.optedOut === false
+}
+
 type ScheduledSession = {
   id: string
   date: string
@@ -129,16 +134,18 @@ export const sendPracticeDayReminders = onSchedule(
     let skipped = 0
 
     for (const [uid, player] of Object.entries(playersVal)) {
-      if (!player || player.role !== 'player') {
-        skipped++
-        continue
-      }
+      if (!player) { skipped++; continue }
+
+      const isPlayer = player.role === 'player'
+      const isParent = player.role === 'parent'
+
+      if (!isPlayer && !isParent) { skipped++; continue }
 
       const reminderRow = reminders[uid]
-      if (reminderRow?.optedOut === true) {
-        skipped++
-        continue
-      }
+
+      // Players: opt-OUT model (default on). Parents: opt-IN model (default off, coach enables).
+      if (isPlayer && reminderRow?.optedOut === true) { skipped++; continue }
+      if (isParent && !parentEmailEnabled(reminderRow))  { skipped++; continue }
 
       const email = (player.email ?? '').trim()
       if (!email) {
@@ -148,16 +155,10 @@ export const sendPracticeDayReminders = onSchedule(
       }
 
       const group = (player.group ?? '').trim()
-      if (!group) {
-        skipped++
-        continue
-      }
+      if (!group) { skipped++; continue }
 
       const upcoming = (sessionsByGroupForPracticeDay.get(group) ?? []).filter(s => !cancellations[s.id])
-      if (upcoming.length === 0) {
-        skipped++
-        continue
-      }
+      if (upcoming.length === 0) { skipped++; continue }
 
       const name = (player.displayName ?? 'there').trim() || 'there'
       const lines = upcoming
@@ -172,18 +173,25 @@ export const sendPracticeDayReminders = onSchedule(
           ? `Practice today — ${upcoming[0].time} @ ${upcoming[0].facility}`
           : `Practice today — ${upcoming.length} sessions`
 
-      const html = `
-        <p>Hi ${escapeHtml(name)},</p>
-        <p>You have <strong>practice today</strong> (${escapeHtml(practiceDayYmd)} · Toronto):</p>
-        <ul>${lines}</ul>
-        <p style="font-size:14px;margin-top:14px"><strong>Please open Practice Builder</strong>, sign in for practice, and complete your <strong>wellness</strong> check before you arrive.</p>
-        <p style="color:#666;font-size:13px;margin-top:12px">You receive these as a Practice Builder player. Turn off practice-day emails in your profile if you prefer not to get them.</p>
-      `.trim()
+      const html = isParent
+        ? `
+          <p>Hi ${escapeHtml(name)},</p>
+          <p>Your athlete has <strong>practice today</strong> (${escapeHtml(practiceDayYmd)} · Toronto):</p>
+          <ul>${lines}</ul>
+          <p style="color:#666;font-size:13px;margin-top:12px">You receive these notifications because your coach enabled practice-day reminders for your account in Practice Builder.</p>
+        `.trim()
+        : `
+          <p>Hi ${escapeHtml(name)},</p>
+          <p>You have <strong>practice today</strong> (${escapeHtml(practiceDayYmd)} · Toronto):</p>
+          <ul>${lines}</ul>
+          <p style="font-size:14px;margin-top:14px"><strong>Please open Practice Builder</strong>, sign in for practice, and complete your <strong>wellness</strong> check before you arrive.</p>
+          <p style="color:#666;font-size:13px;margin-top:12px">You receive these as a Practice Builder player. Turn off practice-day emails in your profile if you prefer not to get them.</p>
+        `.trim()
 
       try {
         await sendResend({ apiKey, from, to: email, subject, html })
         sent++
-        console.log('[sendPracticeDayReminders] sent to', email)
+        console.log('[sendPracticeDayReminders] sent to', email, `(${player.role})`)
       } catch (e) {
         console.error('[sendPracticeDayReminders] Resend failed for', email, e)
       }
